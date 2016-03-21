@@ -10,31 +10,32 @@ import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.content.IntentFilter;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.ListView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import java.lang.Math;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+
+public class MainActivity extends AppCompatActivity implements SensorEventListener {
+
 
     private static final int SHOW_DATA = 1;
     private static final int SHOW_MAP = 2;
     private final static int SHOW_MODE = SHOW_MAP;
-    int count = 0;
     static final String TAG = "MainActivity";
     static Activity myThis;
     BluetoothAdapter
@@ -43,12 +44,32 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_ENABLE_BT = 1;
     private Math math;
     int flag = 0;
+    float rotate = -45;
     Handler handler = new Handler();
+
+
+    private SensorManager sensorManager;
+    private Sensor acc_sensor;
+    private Sensor mag_sensor;
+    //加速度传感器数据
+    float accValues[] = new float[3];
+    //地磁传感器数据
+    float magValues[] = new float[3];
+    //旋转矩阵，用来保存磁场和加速度的数据
+    float r[] = new float[9];
+    //模拟方向传感器的数据（原始数据为弧度）
+    float values[] = new float[3];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        acc_sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        mag_sensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+        sensorManager.registerListener(this, acc_sensor, SensorManager.SENSOR_DELAY_GAME);
+        sensorManager.registerListener(this, mag_sensor, SensorManager.SENSOR_DELAY_GAME);
         myThis = this;
         String[] bluetoothDevice = getResources().getStringArray(R.array.bluetooth_device);
 //        mlistView = (ListView) findViewById(R.id.list);
@@ -63,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
                 itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0));
             }
         }
-//        mlistView.setAdapter(new MyAdapter(MainActivity.this, itemBeanList));
+
         Log.i(TAG, mAdapter.getAddress());
         Log.i(TAG, mAdapter.getName());
 
@@ -97,30 +118,14 @@ public class MainActivity extends AppCompatActivity {
                         if (liveFlag == false)
                             itemBeanList.add(new DeviceBean(remoteDeviceName, remoteDevice.getAddress(), remoteDeviceRssi, remoteDevicedis));
 
-//                        Bundle bundle = new Bundle();
-//                        bundle.putString("name", remoteDeviceName);
-//                        bundle.putString("address", remoteDevice.getAddress());
-//                        bundle.putShort("rssi", remoteDeviceRssi);
-//                        bundle.putDouble("dis", remoteDevicedis);
-
-                        //fragment.setArguments(bundle);
                         Log.i(TAG, "OK");
 
                         DataUpdate();
-//                        mlistView.setAdapter(new MyAdapter(MainActivity.this, itemBeanList));
-//                        Toast.makeText(MainActivity.this, "" + remoteDeviceRssi, Toast.LENGTH_SHORT).show();
                     }
                 }
             }
         };
         registerReceiver(deviceFound, new IntentFilter(BluetoothDevice.ACTION_FOUND));
-
-//        mlistView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-//            @Override
-//            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-//                Toast.makeText(MainActivity.this, "第" + id + "个被点击", Toast.LENGTH_LONG).show();
-//            }
-//        });
 
         handler.post(task);
     }
@@ -134,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
             beginTransaction.add(R.id.fragmentlayout, fragment, "Fragment");
         } else {
             FragmentMap fragment = new FragmentMap();
-            beginTransaction.add(R.id.fragmentlayout, fragment, "Fragment");
+            beginTransaction.add(R.id.fragmentlayout, fragment, "map");
         }
         beginTransaction.commit();
         Log.i(TAG, "提交成功");
@@ -205,4 +210,44 @@ public class MainActivity extends AppCompatActivity {
             handler.postDelayed(this, 5000);
         }
     };
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+
+        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            accValues = event.values.clone();//这里是对象，需要克隆一份，否则共用一份数据
+        } else if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+            magValues = event.values.clone();//这里是对象，需要克隆一份，否则共用一份数据
+        }
+        /**public static boolean getRotationMatrix (float[] R, float[] I, float[] gravity, float[] geomagnetic)
+         * 填充旋转数组r
+         * r：要填充的旋转数组
+         * I:将磁场数据转换进实际的重力坐标中 一般默认情况下可以设置为null
+         * gravity:加速度传感器数据
+         * geomagnetic：地磁传感器数据
+         */
+        SensorManager.getRotationMatrix(r, null, accValues, magValues);
+        /**
+         * public static float[] getOrientation (float[] R, float[] values)
+         * R：旋转数组
+         * values ：模拟方向传感器的数据
+         */
+
+        SensorManager.getOrientation(r, values);
+
+        rotate = (int) Math.toDegrees(values[0]);
+        rotate = rotate / 10 * 10;
+        Log.i(TAG, String.valueOf(rotate));
+        FragmentManager fragmentManager = getFragmentManager();
+        FragmentTransaction beginTransaction = fragmentManager.beginTransaction();
+        FragmentDirection direction = new FragmentDirection();
+        direction.setRotate(rotate);
+        beginTransaction.replace(R.id.directionlayout, direction, "direction");
+        beginTransaction.commit();
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+    }
 }

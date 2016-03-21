@@ -42,11 +42,8 @@ public class FragmentMap extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View mView = inflater.inflate(R.layout.fragment_map, container, false);
-        ImageView direction = (ImageView) mView.findViewById(R.id.iv_direction);
-        direction.setImageResource(R.drawable.direction);
 
-        ImageView north = (ImageView) mView.findViewById(R.id.iv_north);
-        north.setImageResource(R.drawable.north);
+
         ImageView mImageView = (ImageView) mView.findViewById(R.id.iv_map);
 //        mImageView.setImageResource(R.drawable.shulai);
         Drawable bitmap = getResources().getDrawable(R.drawable.table);
