@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Lanya</string>
+    <string name="menu_refresh">校准</string>
+    <string name="menu_switch">广播开关</string>
+
+    <string-array name="bluetooth_device">
+        <item>"7C:EC:79:E0:BB:75"</item>
+        <item>"7C:EC:79:E0:BB:67"</item>
+        <item>"DD:B5:C2:C1:92:6B"</item>
+        <item>"7C:EC:79:E0:BD:CA"</item>
+        <item>"7C:EC:79:E0:BD:BA"</item>
+    </string-array>
+</resources>
