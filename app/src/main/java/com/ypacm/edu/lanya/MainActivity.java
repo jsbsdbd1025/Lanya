@@ -205,6 +205,4 @@ public class MainActivity extends AppCompatActivity {
             handler.postDelayed(this, 5000);
         }
     };
-
-
 }
