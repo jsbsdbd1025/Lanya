@@ -7,9 +7,11 @@ import android.app.FragmentTransaction;
 import android.app.ListFragment;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.hardware.Sensor;
@@ -43,14 +45,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private final static int SHOW_MODE = SHOW_MAP;
     static final String TAG = "MainActivity";
     static Activity myThis;
-    BluetoothAdapter
-            mAdapter = BluetoothAdapter.getDefaultAdapter();
+    BluetoothAdapter mBluetoothAdapter;
     List<DeviceBean> itemBeanList = new ArrayList<>();
-    private static final int REQUEST_ENABLE_BT = 1;
-    private Math math;
+    Math math;
     int flag = 0;
     float rotate = -45;
-    Handler handler = new Handler();
 
     private double Pi = Math.acos(-1);
     private SensorManager sensorManager;
@@ -64,8 +63,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     float r[] = new float[9];
     //模拟方向传感器的数据（原始数据为弧度）
     float values[] = new float[3];
-    float locationX = 41;
-    float locationY = 38;
+    float locationX = 0;
+    float locationY = 0;
     float showX = 0;
     float showY = 0;
     double tileMap[][];
@@ -76,6 +75,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     FragmentLocation location = new FragmentLocation();
     FragmentDirection fragmentDirection = new FragmentDirection();
     float density;
+
+
+    private static final int REQUEST_ENABLE_BT = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,13 +94,105 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         displayHeigth = heightPixels / density;
         myThis = this;
 
+        // Use this check to determine whether BLE is supported on the device.  Then you can
+        // selectively disable BLE-related features.
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            finish();
+        }
+
+        // Initializes a Bluetooth adapter.  For API level 18 and above, get a reference to
+        // BluetoothAdapter through BluetoothManager.
+        final BluetoothManager bluetoothManager =
+                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        mBluetoothAdapter = bluetoothManager.getAdapter();
+
+        // Checks if Bluetooth is supported on the device.
+        if (mBluetoothAdapter == null) {
+            finish();
+            return;
+        }
+
         initSensor();
         UIDirection();
         initBluetooth();
         UIUpdate();
-        BluetoothOperate();
-        handler.post(task);
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Ensures Bluetooth is enabled on the device.  If Bluetooth is not currently enabled,
+        // fire an intent to display a dialog asking the user to grant permission to enable it.
+        if (!mBluetoothAdapter.isEnabled()) {
+            if (!mBluetoothAdapter.isEnabled()) {
+                Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+            }
+        }
+        scanLeDevice(true);
+    }
+
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        scanLeDevice(false);
+    }
+
+    private void scanLeDevice(final boolean enable) {
+        if (enable) {
+            mBluetoothAdapter.startLeScan(mLeScanCallback);
+        } else {
+            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+        }
+    }
+
+    // Device scan callback.
+    private BluetoothAdapter.LeScanCallback mLeScanCallback =
+            new BluetoothAdapter.LeScanCallback() {
+
+                @Override
+                public void onLeScan(final BluetoothDevice device, final int rssi, byte[] scanRecord) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Log.i(TAG, "duangduangduang");
+                            String remoteDeviceName = device.getName();
+                            String remoteDevice = device.getAddress();
+                            short remoteDeviceRssi = (short) rssi;
+                            double remoteDevicedis = calcDis(remoteDeviceRssi);
+
+                            boolean liveFlag = false;
+                            for (DeviceBean bean : itemBeanList) {
+                                if (bean.DeviceAddress.equals(device.getAddress())) {
+                                    liveFlag = true;
+                                    bean.DeviceRSSI = (short) rssi;
+                                    bean.DeviceDis = remoteDevicedis;
+                                    bean.count++;
+                                    bean.sumDis += remoteDevicedis;
+                                    if (remoteDevicedis > bean.maxnDis)
+                                        bean.maxnDis = remoteDevicedis;
+                                    if (remoteDevicedis < bean.minnDis)
+                                        bean.minnDis = remoteDevicedis;
+
+                                }
+                            }
+//                            if (liveFlag == false)
+//                                itemBeanList.add(new DeviceBean(remoteDeviceName, remoteDevice, remoteDeviceRssi, remoteDevicedis, 0, 0,1,remoteDevicedis,remoteDevicedis,remoteDevicedis));
+                            int effectiveSignalNum = 0;
+                            for (DeviceBean bean : itemBeanList) {
+                                if (bean.count >= 3) {
+                                    effectiveSignalNum++;
+                                }
+                            }
+                            if (effectiveSignalNum >= 3) {
+                                calc();
+                            }
+                        }
+                    });
+                }
+            };
 
     private void UIDirection() {
         //指南方向图标
@@ -118,29 +212,24 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
     private void initBluetooth() {
         String[] bluetoothDevice = getResources().getStringArray(R.array.bluetooth_device);
-        //打开蓝牙
-        if (!mAdapter.isEnabled()) {
-            Intent enabler = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(enabler, REQUEST_ENABLE_BT);
-        }
-
         Log.i(TAG, "" + bluetoothDevice.length);
         for (int i = 1; i <= bluetoothDevice.length; i++) {
             if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BD:CA")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 13, 38));//507
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 13, 38, 0, 0, 0, 1000));//507
+
             } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BD:BA")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 48, 31));//506东
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 48, 31, 0, 0, 0, 1000));//506东
             } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BB:67")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 40, 38));//503
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 40, 38, 0, 0, 0, 1000));//503
             } else if (bluetoothDevice[i - 1].equals("D0:B5:C2:C1:92:6B")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 20, 31));//508东
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 20, 31, 0, 0, 0, 1000));//508东
             } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BB:75")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 27, 31));//506西
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 27, 31, 0, 0, 0, 1000));//506西
             }
         }
 
-        Log.i(TAG, mAdapter.getAddress());
-        Log.i(TAG, mAdapter.getName());
+        Log.i(TAG, mBluetoothAdapter.getAddress());
+        Log.i(TAG, mBluetoothAdapter.getName());
     }
 
     public void UIUpdate() {
@@ -159,50 +248,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         Log.i(TAG, "提交成功");
     }
 
-
-    private void BluetoothOperate() {
-        BroadcastReceiver deviceFound = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                if (BluetoothDevice.ACTION_FOUND.equals(action)) {
-                    Log.i(TAG, "从Intent得到blueDevice对象");
-                    BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-
-                    if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
-                        Log.i(TAG, "获取设备信息");
-                        String remoteDeviceName = intent.getStringExtra(BluetoothDevice.EXTRA_NAME);
-                        BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                        short remoteDeviceRssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
-                        double remoteDevicedis = calcDis(remoteDeviceRssi);
-
-                        boolean liveFlag = false;
-                        for (DeviceBean bean : itemBeanList) {
-                            if (bean.DeviceAddress.equals(remoteDevice.getAddress())) {
-                                liveFlag = true;
-                                bean.DeviceRSSI = remoteDeviceRssi;
-                                bean.DeviceDis = remoteDevicedis;
-                            }
-                        }
-                        if (liveFlag == false)
-                            itemBeanList.add(new DeviceBean(remoteDeviceName, remoteDevice.getAddress(), remoteDeviceRssi, remoteDevicedis, 0, 0));
-
-                        int effectiveSignalNum = 0;
-                        for (DeviceBean bean : itemBeanList) {
-                            if (bean.DeviceDis > 0 && bean.DeviceDis <= 8) {
-                                effectiveSignalNum++;
-                            }
-                        }
-                        if (effectiveSignalNum >= 3) {
-                            calc();
-                        }
-                    }
-                }
-            }
-        };
-        registerReceiver(deviceFound, new IntentFilter(BluetoothDevice.ACTION_FOUND));
-    }
-
     private void calc() {
         //计算locationX，locationY
         int tempX1 = 0, tempY1 = 0;
@@ -211,9 +256,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         tileMap = new double[100][100];
         int tileX, tileY;
         for (DeviceBean bean : itemBeanList) {
-            if (bean.DeviceDis > 0 && bean.DeviceDis <= 8) {
+            if (bean.count >= 3) {
+                bean.DeviceDis = (bean.sumDis - bean.maxnDis - bean.minnDis) / (bean.count - 2);
                 for (int angle = 0; angle < 360; angle += 2) {
-
                     for (int dis = 0; dis <= 5; dis++) {
 
                         if (bean.DeviceDis + dis <= 8) {
@@ -241,8 +286,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         }
                     }
                 }
+                bean.count = 0;
+                bean.maxnDis = 0;
+                bean.minnDis = 1000;
             }
-            bean.DeviceDis = 0;
         }
         double maxn = 0;
         int tempShowX = 0;
@@ -289,10 +336,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     item.setIcon(R.drawable.ic_action_open);
                     Toast.makeText(getBaseContext(), "开始广播", Toast.LENGTH_SHORT).show();
                     flag = 1;
+                    scanLeDevice(true);
                 } else {
                     Toast.makeText(getBaseContext(), "停止广播", Toast.LENGTH_SHORT).show();
                     item.setIcon(R.drawable.ic_action_close);
                     flag = 0;
+                    scanLeDevice(false);
                 }
                 return true;
             }
@@ -310,20 +359,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             }
         }
     }
-
-    private Runnable task = new Runnable() {
-        public void run() {
-            Log.i(TAG, "duangduangduang");
-            // TODO Auto-generated method stub
-            //需要执行的代码
-            if (mAdapter.isDiscovering())
-                mAdapter.cancelDiscovery();
-            if (flag == 1) {
-                mAdapter.startDiscovery();
-            }
-            handler.postDelayed(this, 5000);
-        }
-    };
 
     @Override
     public void onSensorChanged(SensorEvent event) {
