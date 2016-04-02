@@ -10,15 +10,21 @@ import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.content.IntentFilter;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.WindowManager;
+import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.lang.Math;
@@ -31,7 +37,6 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
-
 
     private static final int SHOW_DATA = 1;
     private static final int SHOW_MAP = 2;
@@ -47,7 +52,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     float rotate = -45;
     Handler handler = new Handler();
 
-
+    private double Pi = Math.acos(-1);
     private SensorManager sensorManager;
     private Sensor acc_sensor;
     private Sensor mag_sensor;
@@ -59,41 +64,106 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     float r[] = new float[9];
     //模拟方向传感器的数据（原始数据为弧度）
     float values[] = new float[3];
+    float locationX = 41;
+    float locationY = 38;
+    float showX = 0;
+    float showY = 0;
+    double tileMap[][];
+
+    float displayWidth;
+    float displayHeigth;
+    FragmentMap fragment = new FragmentMap();
+    FragmentLocation location = new FragmentLocation();
+    FragmentDirection fragmentDirection = new FragmentDirection();
+    float density;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        WindowManager wm = this.getWindowManager();
 
+        DisplayMetrics dm = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(dm);
+        int widthPixels = dm.widthPixels;
+        int heightPixels = dm.heightPixels;
+        density = dm.density;
+        displayWidth = widthPixels / density;
+        displayHeigth = heightPixels / density;
+        myThis = this;
+
+        initSensor();
+        UIDirection();
+        initBluetooth();
+        UIUpdate();
+        BluetoothOperate();
+        handler.post(task);
+    }
+
+    private void UIDirection() {
+        //指南方向图标
+        FragmentManager fragmentManager = getFragmentManager();
+        FragmentTransaction beginTransaction = fragmentManager.beginTransaction();
+        beginTransaction.add(R.id.directionlayout, fragmentDirection, "direction");
+        beginTransaction.commit();
+    }
+
+    private void initSensor() {
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         acc_sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         mag_sensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
         sensorManager.registerListener(this, acc_sensor, SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(this, mag_sensor, SensorManager.SENSOR_DELAY_GAME);
-        myThis = this;
+    }
+
+    private void initBluetooth() {
         String[] bluetoothDevice = getResources().getStringArray(R.array.bluetooth_device);
-//        mlistView = (ListView) findViewById(R.id.list);
+        //打开蓝牙
         if (!mAdapter.isEnabled()) {
             Intent enabler = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
             startActivityForResult(enabler, REQUEST_ENABLE_BT);
         }
 
-        if (SHOW_MODE == SHOW_DATA) {
-            Log.i(TAG, "" + bluetoothDevice.length);
-            for (int i = 1; i <= bluetoothDevice.length; i++) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0));
+        Log.i(TAG, "" + bluetoothDevice.length);
+        for (int i = 1; i <= bluetoothDevice.length; i++) {
+            if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BD:CA")) {
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 13, 38));//507
+            } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BD:BA")) {
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 48, 31));//506东
+            } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BB:67")) {
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 40, 38));//503
+            } else if (bluetoothDevice[i - 1].equals("D0:B5:C2:C1:92:6B")) {
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 20, 31));//508东
+            } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BB:75")) {
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 27, 31));//506西
             }
         }
 
         Log.i(TAG, mAdapter.getAddress());
         Log.i(TAG, mAdapter.getName());
+    }
 
-        DataUpdate();
+    public void UIUpdate() {
+        FragmentManager fragmentManager = getFragmentManager();
+        FragmentTransaction beginTransaction = fragmentManager.beginTransaction();
+        if (SHOW_MODE == SHOW_DATA) {
+            FragmentList fragment = new FragmentList();
+            fragment.setData(itemBeanList);
+            beginTransaction.add(R.id.fragmentlayout, fragment, "Fragment");
+        } else {
+            beginTransaction.add(R.id.fragmentlayout, fragment, "map");
+            location.upDateLocation(rotate - 45, 50, 50);
+            beginTransaction.add(R.id.locationlayout, location, "location");
+        }
+        beginTransaction.commit();
+        Log.i(TAG, "提交成功");
+    }
 
+
+    private void BluetoothOperate() {
         BroadcastReceiver deviceFound = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                Log.i(TAG, "xiuxiuxiu...");
                 String action = intent.getAction();
                 if (BluetoothDevice.ACTION_FOUND.equals(action)) {
                     Log.i(TAG, "从Intent得到blueDevice对象");
@@ -101,7 +171,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
                     if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
                         Log.i(TAG, "获取设备信息");
-                        //信号强度。
                         String remoteDeviceName = intent.getStringExtra(BluetoothDevice.EXTRA_NAME);
                         BluetoothDevice remoteDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                         short remoteDeviceRssi = intent.getExtras().getShort(BluetoothDevice.EXTRA_RSSI);
@@ -116,33 +185,81 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                             }
                         }
                         if (liveFlag == false)
-                            itemBeanList.add(new DeviceBean(remoteDeviceName, remoteDevice.getAddress(), remoteDeviceRssi, remoteDevicedis));
+                            itemBeanList.add(new DeviceBean(remoteDeviceName, remoteDevice.getAddress(), remoteDeviceRssi, remoteDevicedis, 0, 0));
 
-                        Log.i(TAG, "OK");
-
-                        DataUpdate();
+                        int effectiveSignalNum = 0;
+                        for (DeviceBean bean : itemBeanList) {
+                            if (bean.DeviceDis > 0 && bean.DeviceDis <= 8) {
+                                effectiveSignalNum++;
+                            }
+                        }
+                        if (effectiveSignalNum >= 3) {
+                            calc();
+                        }
                     }
                 }
             }
         };
         registerReceiver(deviceFound, new IntentFilter(BluetoothDevice.ACTION_FOUND));
-
-        handler.post(task);
     }
 
-    public void DataUpdate() {
-        FragmentManager fragmentManager = getFragmentManager();
-        FragmentTransaction beginTransaction = fragmentManager.beginTransaction();
-        if (SHOW_MODE == SHOW_DATA) {
-            FragmentList fragment = new FragmentList();
-            fragment.setData(itemBeanList);
-            beginTransaction.add(R.id.fragmentlayout, fragment, "Fragment");
-        } else {
-            FragmentMap fragment = new FragmentMap();
-            beginTransaction.add(R.id.fragmentlayout, fragment, "map");
+    private void calc() {
+        //计算locationX，locationY
+        int tempX1 = 0, tempY1 = 0;
+        int tempX2 = 0, tempY2 = 0;
+        Toast.makeText(MainActivity.myThis, "开始计算位置", Toast.LENGTH_SHORT).show();
+        tileMap = new double[100][100];
+        int tileX, tileY;
+        for (DeviceBean bean : itemBeanList) {
+            if (bean.DeviceDis > 0 && bean.DeviceDis <= 8) {
+                for (int angle = 0; angle < 360; angle += 2) {
+
+                    for (int dis = 0; dis <= 5; dis++) {
+
+                        if (bean.DeviceDis + dis <= 8) {
+                            tileX = bean.X + (int) (Math.sin(angle / 180 * Pi) * (bean.DeviceDis + dis) / 0.8);
+                            tileY = bean.Y + (int) (Math.cos(angle / 180 * Pi) * (bean.DeviceDis + dis) / 0.3);
+                            if (tileX >= 0 && tileX < 100 && tileY >= 0 && tileY < 100) {
+                                if (tileX == tempX1 && tileY == tempY1)
+                                    continue;
+                                tempX1 = tileX;
+                                tempY1 = tileY;
+                                tileMap[tileX][tileY] += 1.0 - ((float) dis) / 5.0;
+                            }
+                        }
+
+                        if (bean.DeviceDis - dis > 0) {
+                            tileX = bean.X + (int) (Math.sin(angle / 180 * Pi) * (bean.DeviceDis - dis) / 0.8);
+                            tileY = bean.Y + (int) (Math.cos(angle / 180 * Pi) * (bean.DeviceDis - dis) / 0.4);
+                            if (tileX >= 0 && tileX < 100 && tileY >= 0 && tileY < 100) {
+                                if (tileX == tempX2 && tileY == tempY2)
+                                    continue;
+                                tempX2 = tileX;
+                                tempY2 = tileY;
+                                tileMap[tileX][tileY] += 1.0 - ((float) dis) / 5.0;
+                            }
+                        }
+                    }
+                }
+            }
+            bean.DeviceDis = 0;
         }
-        beginTransaction.commit();
-        Log.i(TAG, "提交成功");
+        double maxn = 0;
+        int tempShowX = 0;
+        int tempShowY = 0;
+        for (int i = 0; i < 100; i++) {
+            for (int j = 0; j < 100; j++) {
+                if (tileMap[i][j] > maxn) {
+                    maxn = tileMap[i][j];
+                    tempShowX = i;
+                    tempShowY = j;
+                }
+            }
+        }
+        locationX = tempShowX;
+        locationY = tempShowY;
+        Toast.makeText(MainActivity.myThis, "位置改变，X= " + locationX + " Y= " + locationY, Toast.LENGTH_SHORT).show();
+
     }
 
     public double calcDis(short rssi) {
@@ -156,7 +273,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
-
         return true;
     }
 
@@ -180,9 +296,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 }
                 return true;
             }
-            // Here we might start a background refresh task
         }
-
         return super.onOptionsItemSelected(item);
     }
 
@@ -237,14 +351,22 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 
         rotate = (int) Math.toDegrees(values[0]);
         rotate = rotate / 10 * 10;
-        Log.i(TAG, String.valueOf(rotate));
-        FragmentManager fragmentManager = getFragmentManager();
-        FragmentTransaction beginTransaction = fragmentManager.beginTransaction();
-        FragmentDirection direction = new FragmentDirection();
-        direction.setRotate(rotate);
-        beginTransaction.replace(R.id.directionlayout, direction, "direction");
-        beginTransaction.commit();
+
+        locationCalc();
+        location.upDateLocation(rotate - 45, showX, showY);
+
     }
+
+    private void locationCalc() {
+
+        float[] matrixValues = new float[9];
+        Matrix tempMatrix = fragment.getMatrix();
+        tempMatrix.getValues(matrixValues);
+        BitmapFactory.Options ops = fragment.getImageSize();
+        showX = (locationX * (ops.outWidth * matrixValues[0] * density) / 100.0f + matrixValues[2]);
+        showY = (locationY * (ops.outHeight * matrixValues[4] * density) / 100.0f + matrixValues[5]);
+    }
+
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {

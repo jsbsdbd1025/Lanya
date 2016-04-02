@@ -25,22 +25,21 @@ public class MyAdapter extends BaseAdapter {
     }
 
     public int addDevice(DeviceBean device) {
-        Log.i("MyAdapter","aaaaa");
-        Log.i("MyAdapter","设备数量："+mlist.size());
-        int pos=0;
-        Log.i("MyAdapter","设备数量："+mlist.size());
-        if(mlist.size()==0)
+        Log.i("MyAdapter", "aaaaa");
+        Log.i("MyAdapter", "设备数量：" + mlist.size());
+        int pos = 0;
+        Log.i("MyAdapter", "设备数量：" + mlist.size());
+        if (mlist.size() == 0)
             return 0;
-        for(int i =0;i<mlist.size();i++) {
+        for (int i = 0; i < mlist.size(); i++) {
             DeviceBean temp;
             temp = mlist.get(i);
             if (temp.DeviceAddress == device.DeviceAddress)
                 pos = i + 1;
         }
         mlist.add(device);
-        if(pos>0)
-        {
-            mlist.remove(pos-1);
+        if (pos > 0) {
+            mlist.remove(pos - 1);
         }
         return pos;
     }

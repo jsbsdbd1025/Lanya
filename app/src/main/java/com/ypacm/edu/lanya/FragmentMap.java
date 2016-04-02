@@ -1,11 +1,14 @@
 package com.ypacm.edu.lanya;
 
 import android.app.Fragment;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -17,9 +20,7 @@ import android.widget.ImageView;
 import android.graphics.drawable.Drawable;
 import android.widget.Toast;
 
-import com.ypacm.edu.lanya.photoview.PhotoViewAttacher;
-import com.ypacm.edu.lanya.photoview.PhotoViewAttacher.OnPhotoTapListener;
-import com.ypacm.edu.lanya.photoview.PhotoViewAttacher.OnMatrixChangedListener;;
+import uk.co.senab.photoview.PhotoViewAttacher;
 
 /**
  * Created by DB on 2016/3/21.
@@ -34,8 +35,6 @@ public class FragmentMap extends Fragment {
     static final String FLING_LOG_STRING = "Fling velocityX: %.2f, velocityY: %.2f";
     static final String TAG = "FragmentList";
     private PhotoViewAttacher mAttacher;
-    private Canvas canvas;
-    private Paint paint;
     private Toast mCurrentToast;
 
     @Override
@@ -45,19 +44,31 @@ public class FragmentMap extends Fragment {
 
 
         ImageView mImageView = (ImageView) mView.findViewById(R.id.iv_map);
-//        mImageView.setImageResource(R.drawable.shulai);
-        Drawable bitmap = getResources().getDrawable(R.drawable.table);
+        Drawable bitmap = getResources().getDrawable(R.drawable.floor5);
         mImageView.setImageDrawable(bitmap);
         // The MAGIC happens here!
         mAttacher = new PhotoViewAttacher(mImageView);
 
         mAttacher.setOnMatrixChangeListener(new MatrixChangeListener());
         mAttacher.setOnPhotoTapListener(new PhotoTapListener());
-//        mAttacher.setOnSingleFlingListener(new SingleFlingListener());
+        mAttacher.setOnSingleFlingListener(new SingleFlingListener());
         return mView;
     }
 
-    private class PhotoTapListener implements OnPhotoTapListener {
+    public BitmapFactory.Options getImageSize() {
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inJustDecodeBounds = true;
+        BitmapFactory.decodeResource(getResources(), R.drawable.floor5, opts);
+        opts.inSampleSize = 1;
+        opts.inJustDecodeBounds = false;
+        return opts;
+    }
+
+    public Matrix getMatrix() {
+        return mAttacher.getDisplayMatrix();
+    }
+
+    private class PhotoTapListener implements PhotoViewAttacher.OnPhotoTapListener {
 
         @Override
         public void onPhotoTap(View view, float x, float y) {
@@ -83,11 +94,22 @@ public class FragmentMap extends Fragment {
         mCurrentToast.show();
     }
 
-    private class MatrixChangeListener implements OnMatrixChangedListener {
+    private class MatrixChangeListener implements PhotoViewAttacher.OnMatrixChangedListener {
 
         @Override
         public void onMatrixChanged(RectF rect) {
             showToast(String.format(SCALE_TOAST_STRING, mAttacher.getScale()));
+        }
+    }
+
+    private class SingleFlingListener implements PhotoViewAttacher.OnSingleFlingListener {
+
+        @Override
+        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+            if (BuildConfig.DEBUG) {
+                Log.d("PhotoView", String.format(FLING_LOG_STRING, velocityX, velocityY));
+            }
+            return true;
         }
     }
 }
