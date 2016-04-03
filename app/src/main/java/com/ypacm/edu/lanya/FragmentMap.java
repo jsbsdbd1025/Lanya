@@ -44,7 +44,7 @@ public class FragmentMap extends Fragment {
 
 
         ImageView mImageView = (ImageView) mView.findViewById(R.id.iv_map);
-        Drawable bitmap = getResources().getDrawable(R.drawable.floor5);
+        Drawable bitmap = getResources().getDrawable(R.drawable.floor5_new);
         mImageView.setImageDrawable(bitmap);
         // The MAGIC happens here!
         mAttacher = new PhotoViewAttacher(mImageView);
@@ -58,7 +58,7 @@ public class FragmentMap extends Fragment {
     public BitmapFactory.Options getImageSize() {
         BitmapFactory.Options opts = new BitmapFactory.Options();
         opts.inJustDecodeBounds = true;
-        BitmapFactory.decodeResource(getResources(), R.drawable.floor5, opts);
+        BitmapFactory.decodeResource(getResources(), R.drawable.floor5_new, opts);
         opts.inSampleSize = 1;
         opts.inJustDecodeBounds = false;
         return opts;
@@ -103,7 +103,6 @@ public class FragmentMap extends Fragment {
     }
 
     private class SingleFlingListener implements PhotoViewAttacher.OnSingleFlingListener {
-
         @Override
         public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
             if (BuildConfig.DEBUG) {

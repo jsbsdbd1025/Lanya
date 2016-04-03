@@ -63,12 +63,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     float r[] = new float[9];
     //模拟方向传感器的数据（原始数据为弧度）
     float values[] = new float[3];
-    float locationX = 0;
-    float locationY = 0;
+    float locationX = 2;
+    float locationY = 50;
     float showX = 0;
     float showY = 0;
     double tileMap[][];
-
+    float gridWidth = 55.6f / 100f;
+    float gridHeight = 24f / 100f;
+    int searchRangeX = (int) (10f / gridWidth);
+    int searchRangeY = (int) (10f / gridHeight);
     float displayWidth;
     float displayHeigth;
     FragmentMap fragment = new FragmentMap();
@@ -105,7 +108,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         final BluetoothManager bluetoothManager =
                 (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         mBluetoothAdapter = bluetoothManager.getAdapter();
-
         // Checks if Bluetooth is supported on the device.
         if (mBluetoothAdapter == null) {
             finish();
@@ -130,7 +132,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
             }
         }
-        scanLeDevice(true);
     }
 
 
@@ -182,7 +183,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
 //                                itemBeanList.add(new DeviceBean(remoteDeviceName, remoteDevice, remoteDeviceRssi, remoteDevicedis, 0, 0,1,remoteDevicedis,remoteDevicedis,remoteDevicedis));
                             int effectiveSignalNum = 0;
                             for (DeviceBean bean : itemBeanList) {
-                                if (bean.count >= 3) {
+                                if (bean.DeviceDis >0) {
                                     effectiveSignalNum++;
                                 }
                             }
@@ -193,6 +194,81 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     });
                 }
             };
+
+    private void calc() {
+        //计算locationX，locationY
+        Toast.makeText(MainActivity.myThis, "开始计算位置", Toast.LENGTH_SHORT).show();
+        double tempDis;
+        tileMap = new double[100][100];
+        int tileX, tileY;
+        for (DeviceBean bean : itemBeanList) {
+            if (bean.DeviceDis >0) {
+//                bean.DeviceDis = (bean.sumDis - bean.minnDis - bean.maxnDis) / (bean.count - 2);
+                for (int i = -searchRangeX + bean.X >= 0 ? -searchRangeX : -bean.X; i <= searchRangeX; i++) {
+                    for (int j = -searchRangeY + bean.Y >= 0 ? -searchRangeY : -bean.Y; j <= searchRangeY; j++) {
+                        tileX = bean.X + i;
+                        tileY = bean.Y + j;
+                        if (tileX >= 0 && tileX < 100 && tileY >= 0 && tileY < 100) {
+                            tempDis = Math.sqrt((i * gridWidth) * (i * gridWidth) + (j * gridHeight) * (j * gridHeight));
+                            if (tempDis > 8 || tempDis < 1 || tempDis > 2 * bean.DeviceDis) {
+                                continue;
+                            } else {
+                                tileMap[tileX][tileY] += 1.0 - Math.pow(Math.abs((bean.DeviceDis - tempDis) / bean.DeviceDis), 0.3);
+                            }
+                        }
+                    }
+                }
+//                for (int angle = 0; angle < 360; angle += 2) {
+//                    for (int dis = 0; dis <= 5; dis++) {
+//                        if (bean.DeviceDis + dis <= 8) {
+//                            tileX = bean.X + (int) (Math.sin(angle / 180 * Pi) * (bean.DeviceDis + dis) / gridWidth);
+//                            tileY = bean.Y + (int) (Math.cos(angle / 180 * Pi) * (bean.DeviceDis + dis) / gridHeight);
+//                            if (tileX >= 0 && tileX < 100 && tileY >= 0 && tileY < 100) {
+//                                if (tileX == tempX1 && tileY == tempY1)
+//                                    continue;
+//                                tempX1 = tileX;
+//                                tempY1 = tileY;
+//                                tileMap[tileX][tileY] += 1.0 - ((float) dis) / 5.0;
+//                            }
+//                        }
+//
+//                        if (bean.DeviceDis - dis > 0) {
+//                            tileX = bean.X + (int) (Math.sin(angle / 180 * Pi) * (bean.DeviceDis - dis) / 0.8);
+//                            tileY = bean.Y + (int) (Math.cos(angle / 180 * Pi) * (bean.DeviceDis - dis) / 0.4);
+//                            if (tileX >= 0 && tileX < 100 && tileY >= 0 && tileY < 100) {
+//                                if (tileX == tempX2 && tileY == tempY2)
+//                                    continue;
+//                                tempX2 = tileX;
+//                                tempY2 = tileY;
+//                                tileMap[tileX][tileY] += 1.0 - ((float) dis) / 5.0;
+//                            }
+//                        }
+//                    }
+//                }
+                bean.DeviceDis = 0;
+                bean.count = 0;
+                bean.maxnDis = 0;
+                bean.minnDis = 1000;
+            }
+        }
+        double maxn = 0;
+        int tempShowX = 0;
+        int tempShowY = 0;
+        for (int i = 0; i < 100; i++) {
+            for (int j = 35; j < 55; j++) {
+                if (tileMap[i][j] > maxn) {
+                    maxn = tileMap[i][j];
+                    tempShowX = i;
+                    tempShowY = j;
+                }
+            }
+        }
+        if (maxn > 0) {
+            locationX = tempShowX;
+            locationY = tempShowY;
+            Toast.makeText(MainActivity.myThis, "位置改变，X= " + locationX + " Y= " + locationY, Toast.LENGTH_SHORT).show();
+        }
+    }
 
     private void UIDirection() {
         //指南方向图标
@@ -215,16 +291,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         Log.i(TAG, "" + bluetoothDevice.length);
         for (int i = 1; i <= bluetoothDevice.length; i++) {
             if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BD:CA")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 13, 38, 0, 0, 0, 1000));//507
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 2, 50, 0, 0, 0, 1000));//507
 
             } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BD:BA")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 48, 31, 0, 0, 0, 1000));//506东
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 50, 40, 0, 0, 0, 1000));//506东
             } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BB:67")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 40, 38, 0, 0, 0, 1000));//503
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 38, 50, 0, 0, 0, 1000));//503
             } else if (bluetoothDevice[i - 1].equals("D0:B5:C2:C1:92:6B")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 20, 31, 0, 0, 0, 1000));//508东
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 14, 40, 0, 0, 0, 1000));//508东
             } else if (bluetoothDevice[i - 1].equals("7C:EC:79:E0:BB:75")) {
-                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 27, 31, 0, 0, 0, 1000));//506西
+                itemBeanList.add(new DeviceBean("icon" + i, bluetoothDevice[i - 1], (short) 0, 0, 23, 40, 0, 0, 0, 1000));//506西
             }
         }
 
@@ -248,66 +324,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         Log.i(TAG, "提交成功");
     }
 
-    private void calc() {
-        //计算locationX，locationY
-        int tempX1 = 0, tempY1 = 0;
-        int tempX2 = 0, tempY2 = 0;
-        Toast.makeText(MainActivity.myThis, "开始计算位置", Toast.LENGTH_SHORT).show();
-        tileMap = new double[100][100];
-        int tileX, tileY;
-        for (DeviceBean bean : itemBeanList) {
-            if (bean.count >= 3) {
-                bean.DeviceDis = (bean.sumDis - bean.maxnDis - bean.minnDis) / (bean.count - 2);
-                for (int angle = 0; angle < 360; angle += 2) {
-                    for (int dis = 0; dis <= 5; dis++) {
-
-                        if (bean.DeviceDis + dis <= 8) {
-                            tileX = bean.X + (int) (Math.sin(angle / 180 * Pi) * (bean.DeviceDis + dis) / 0.8);
-                            tileY = bean.Y + (int) (Math.cos(angle / 180 * Pi) * (bean.DeviceDis + dis) / 0.3);
-                            if (tileX >= 0 && tileX < 100 && tileY >= 0 && tileY < 100) {
-                                if (tileX == tempX1 && tileY == tempY1)
-                                    continue;
-                                tempX1 = tileX;
-                                tempY1 = tileY;
-                                tileMap[tileX][tileY] += 1.0 - ((float) dis) / 5.0;
-                            }
-                        }
-
-                        if (bean.DeviceDis - dis > 0) {
-                            tileX = bean.X + (int) (Math.sin(angle / 180 * Pi) * (bean.DeviceDis - dis) / 0.8);
-                            tileY = bean.Y + (int) (Math.cos(angle / 180 * Pi) * (bean.DeviceDis - dis) / 0.4);
-                            if (tileX >= 0 && tileX < 100 && tileY >= 0 && tileY < 100) {
-                                if (tileX == tempX2 && tileY == tempY2)
-                                    continue;
-                                tempX2 = tileX;
-                                tempY2 = tileY;
-                                tileMap[tileX][tileY] += 1.0 - ((float) dis) / 5.0;
-                            }
-                        }
-                    }
-                }
-                bean.count = 0;
-                bean.maxnDis = 0;
-                bean.minnDis = 1000;
-            }
-        }
-        double maxn = 0;
-        int tempShowX = 0;
-        int tempShowY = 0;
-        for (int i = 0; i < 100; i++) {
-            for (int j = 0; j < 100; j++) {
-                if (tileMap[i][j] > maxn) {
-                    maxn = tileMap[i][j];
-                    tempShowX = i;
-                    tempShowY = j;
-                }
-            }
-        }
-        locationX = tempShowX;
-        locationY = tempShowY;
-        Toast.makeText(MainActivity.myThis, "位置改变，X= " + locationX + " Y= " + locationY, Toast.LENGTH_SHORT).show();
-
-    }
 
     public double calcDis(short rssi) {
 
